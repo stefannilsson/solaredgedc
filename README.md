@@ -44,5 +44,44 @@ MQTT_QOS=1
 }
 ```
 
+## LaunchDaemons example (macOS)
+`# cat /Library/LaunchDaemons/com.stefannilssonconsulting.solaredgedc-A1B2C3D4.plist`
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>KeepAlive</key>
+    <true/>
+    <key>Label</key>
+    <string>com.stefannilssonconsulting.solaredgedc</string>
+<key>EnvironmentVariables</key>
+<dict>
+<key>MODBUS_HOSTNAME</key><string>192.168.0.5</string>
+<key>MODBUS_PORT</key><string>1502</string>
+<key>MODBUS_SLAVEID</key><string>1</string>
+<key>MODBUS_POLLINTERVAL</key><string>5000</string>
+<key>LOG_LEVEL</key><string>INFO</string>
+<key>MQTT_URI</key><string>tcp://my.mqtt.endpoint:1883</string>
+<key>MQTT_USERNAME</key><string>myuser</string>
+<key>MQTT_PASSWORD</key><string>mypassword</string>
+<key>MQTT_TOPIC</key><string>sensors/energy/solar/A1B2C3D4</string>
+<key>MQTT_QOS</key><string>1</string>
+</dict>
+    <key>ProgramArguments</key>
+    <array>
+    <string>/path/to/binary/solaredgedc</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/solaredge_out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/solaredge_err.log</string>
+</dict>
+</plist>
+
+```
+
 ## License
 [MIT](https://github.com/stefannilsson/solaredgedc/blob/master/LICENSE)
