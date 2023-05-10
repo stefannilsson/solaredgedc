@@ -109,7 +109,8 @@ func PollRegisters(client *ModbusClient) *ModbusRegisters {
 	}
 
 	if len(readValues) == 0 {
-		errorLog.Println("No values successfully read from registers.")
+		errorLog.Println("No values successfully read from registers. Exiting (attempting to recover with a restart)")
+		panic("Quit.")
 	}
 
 	return &readValues
