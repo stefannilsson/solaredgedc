@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	GRACEFUL_SHUTDOWN_TIMEOUT_MS = 2000 // ms to let modbus poller / mqtt publisher to gracefully disconnect.
-	DELAY_UNSUCCESSFUL_POLLS_MS  = 1000 // ms to be delayed between attempts if no successful modbus reads finished
+	GRACEFUL_SHUTDOWN_TIMEOUT_MS = 2000  // ms to let modbus poller / mqtt publisher to gracefully disconnect.
+	DELAY_UNSUCCESSFUL_POLLS_MS  = 1000  // ms to be delayed between attempts if no successful modbus reads finished
+	DELAY_FAILING_MODBUS_LINK_MS = 40000 // ms to be delayed before modbus reconnect attempt if modbus connection fails
 )
 
 var errorLog *logrus.Entry
@@ -39,13 +40,6 @@ func main() {
 	errorLog, infoLog, _ = logger.GetLoggers("main")
 	infoLog.Println("SolarEdge Data Collector started.")
 
-	// Initialize and try connect Modbus poller
-	modbusClient := modbus.NewPoller(&modbus.ModbusConfiguration{
-		Hostname: modbusConfig.hostname,
-		Port:     modbusConfig.port,
-		SlaveId:  modbusConfig.slaveId,
-	})
-
 	// Initialize and try connect MQTT publisher
 	mqttClient := mqtt.NewTelemetryMqtt(&mqtt.MqttConfig{
 		URI:      mqttConfig.uri,
@@ -56,17 +50,37 @@ func main() {
 		Topic:    mqttConfig.topic,
 	})
 
+	// Initialize and try connect Modbus poller
+	modbusClient := modbus.NewPoller(&modbus.ModbusConfiguration{
+		Hostname: modbusConfig.hostname,
+		Port:     modbusConfig.port,
+		SlaveId:  modbusConfig.slaveId,
+	})
+
 	//
-	HandleSigInt(modbusClient, mqttClient)
+	HandleSigInt(mqttClient)
 
 	// Let's keep on polling all Modbus registers - for ever and ever.
 	// MQTT Publisher maintains its own internal buffer if MQTT connection is temporarily down.
 	for {
+
 		registerValues := modbus.PollRegisters(modbusClient)
 		// TODO: Implement check and indicator from PollRegister(...) if total read time was more than X amount of ms. Could be an issue if some registers took a very long time to read.
 
 		// if no successfully register values read, let's sleep for a second and try again.
 		if len(*registerValues) == 0 {
+			time.Sleep(DELAY_FAILING_MODBUS_LINK_MS * time.Millisecond)
+
+			// Disconnect Modbus
+			modbusClient.TCPClientHandler.Close()
+			time.Sleep(GRACEFUL_SHUTDOWN_TIMEOUT_MS * time.Millisecond)
+
+			// Initialize and try connect Modbus poller
+			modbusClient = modbus.NewPoller(&modbus.ModbusConfiguration{
+				Hostname: modbusConfig.hostname,
+				Port:     modbusConfig.port,
+				SlaveId:  modbusConfig.slaveId,
+			})
 			time.Sleep(DELAY_UNSUCCESSFUL_POLLS_MS * time.Millisecond)
 			continue
 		}
@@ -89,7 +103,7 @@ func main() {
 	}
 }
 
-func HandleSigInt(modbusClient *modbus.ModbusClient, mqttClient MQTTClient.Client) {
+func HandleSigInt(mqttClient MQTTClient.Client) {
 	// give modbus & mqtt client some time to gracefully disconnect in case of CTRL+C
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -97,9 +111,6 @@ func HandleSigInt(modbusClient *modbus.ModbusClient, mqttClient MQTTClient.Clien
 		<-c
 		// sig is a ^C, handle it
 		errorLog.Errorf("Shutting down... Exiting in %v ms.", GRACEFUL_SHUTDOWN_TIMEOUT_MS)
-
-		// Disconnect Modbus
-		modbusClient.TCPClientHandler.Close()
 
 		// Disconnect MQTT
 		mqttClient.Disconnect(500)
